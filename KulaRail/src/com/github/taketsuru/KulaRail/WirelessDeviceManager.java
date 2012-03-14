@@ -77,12 +77,9 @@ public class WirelessDeviceManager implements Listener, SignedBlockListener {
 
 		    Lever lever = (Lever)adjacentState.getData();
 		    if (lever.isPowered() != powered) {
-			log.info(String.format("receiver %s %s", channelName, powered ? "ON" : "OFF"));
 			net.minecraft.server.World world = ((org.bukkit.craftbukkit.CraftWorld)adjacent.getWorld()).getHandle();
 			net.minecraft.server.Block.byId[adjacent.getType().getId()]
 				.interact(world, adjacent.getX(), adjacent.getY(), adjacent.getZ(), null);
-			//lever.setPowered(powered);
-			//adjacentState.update();
 		    }
 		}
 	    }

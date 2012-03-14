@@ -95,7 +95,7 @@ public class SignedBlockManager implements Listener {
 	}
 
 	if (plugin.getConfig().isList("signed_blocks")) {
-	    List<Map<?, ?>> listData = plugin.getConfig().getMapList("signed_blocks");
+	    List<Map<String, Object>> listData = plugin.getConfig().getMapList("signed_blocks");
 	    for (Map<String, Object> listDataEntry : listData) {
 		try {
 		    onCreate(new SignedBlock(plugin.getServer(), listDataEntry));
