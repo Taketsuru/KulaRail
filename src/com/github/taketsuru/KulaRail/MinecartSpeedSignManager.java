@@ -71,7 +71,9 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	Location from = event.getFrom();
 	Location to = event.getTo();
 	if (from.getWorld() != to.getWorld()
-		|| from.getBlockX() == to.getBlockX() && from.getBlockY() == to.getBlockY() && from.getBlockZ() == to.getBlockZ()) {
+		|| (from.getBlockX() == to.getBlockX()
+		    && from.getBlockY() == to.getBlockY()
+		    && from.getBlockZ() == to.getBlockZ())) {
 	    return;
 	}
 
