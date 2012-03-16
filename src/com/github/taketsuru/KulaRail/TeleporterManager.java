@@ -101,7 +101,6 @@ public class TeleporterManager implements Listener, SignedBlockListener {
 		newLocation.setYaw(dir * 90.0f);
 		vehicle.teleport(newLocation);
 		vehicle.setVelocity(new org.bukkit.util.Vector());
-		log.info(String.format("%s activated", channelName));
 		break;
 	    }
 	}
