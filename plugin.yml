@@ -1,3 +1,6 @@
 name: KulaRail
 main: com.github.taketsuru.KulaRail.KulaRail
-version: 0.1
+version: 0.2
+commands:
+    kr:
+        description: KulaRail commands.
