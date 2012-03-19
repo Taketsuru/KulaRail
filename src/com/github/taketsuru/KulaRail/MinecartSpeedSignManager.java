@@ -6,7 +6,10 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import org.bukkit.ChatColor;
@@ -31,6 +34,8 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
     Plugin plugin;
     SignedBlockManager signedBlockManager;
     double baseSpeed = 0.4;
+    Set<Minecart> monitored = new HashSet<Minecart>();
+    int monitorTask = -1;
 
     public MinecartSpeedSignManager(SignedBlockManager signedBlockManager) {
 	this.signedBlockManager = signedBlockManager;
@@ -44,6 +49,12 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	commandManager.registerSubcommand("maxspeed", new CommandExecutor() {
 	    public boolean run(CommandSender sender, Command cmd, String label, String[] args) {
 		return doMaxSpeedCommand(sender, cmd, label, args);
+	    }
+	});
+
+	commandManager.registerSubcommand("monitorcart", new CommandExecutor() {
+	    public boolean run(CommandSender sender, Command cmd, String label, String[] args) {
+		return doMonitorCommand(sender, cmd, label, args);
 	    }
 	});
 
@@ -62,6 +73,7 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
     }
 
     public void onDisable(Plugin plugin, CommandManager commandManager) {
+	stopMonitor();
 	this.plugin = null;
 	speedLabels.clear();
     }
@@ -81,6 +93,11 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	try {
 	    Yaml yaml = new Yaml();
 	    Map<?, ?> loadedObj = (Map<?, ?>)yaml.loadAs(reader, speedLabels.getClass());
+	    if (loadedObj == null) {
+		log.warning("Format error in " + speedLabelsFileName + ". Default values will be loaded.");
+		loadDefaultSpeedLabels();
+		return;
+	    }
 	    for (Object key : loadedObj.keySet()) {
 		Object value = loadedObj.get(key);
 		try {
@@ -100,7 +117,7 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	FileWriter writer = new FileWriter(file);
 	try {
 	    Yaml yaml = new Yaml();
-	    yaml.dump(speedLabels);
+	    yaml.dump(speedLabels, writer);
 	} finally {
 	    writer.close();
 	}
@@ -109,12 +126,20 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
     boolean doMaxSpeedCommand(CommandSender sender, Command cmd, String label, String[] args) {
 	switch (args.length) {
 	case 1:
+	    if (! sender.hasPermission("kularail.maxspeed.list")) {
+		sender.sendMessage("You don't have the permission to do it.");
+		break;
+	    }
 	    for (String speedLabel : speedLabels.keySet()) {
 		sender.sendMessage(String.format("%s - %g", speedLabel, speedLabels.get(speedLabel)));
 	    }
 	    break;
 	    
 	case 2:
+	    if (! sender.hasPermission("kularail.maxspeed.remove")) {
+		sender.sendMessage("You don't have the permission to do it.");
+		break;
+	    }
 	    speedLabels.remove(args[1]);
 	    try {
 		saveSpeedLabels();
@@ -124,6 +149,10 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	    break;
 	    
 	case 3:
+	    if (! sender.hasPermission("kularail.maxspeed.set")) {
+		sender.sendMessage("You don't have the permission to do it.");
+		break;
+	    }
 	    try {
 		speedLabels.put(args[1], Double.valueOf(args[2]));
 		saveSpeedLabels();
@@ -141,7 +170,53 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	
 	return true;
     }
+
+    boolean doMonitorCommand(CommandSender sender, Command cmd, String label, String[] args) {
+	if (! sender.hasPermission("kularail.monitorcart")) {
+	    sender.sendMessage("You don't have permission to do it.");
+	    return true;
+	}
+
+	if (monitorTask < 0) {
+	    monitorTask = plugin.getServer().getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
+		public void run() {
+		    if (monitored.isEmpty()) {
+			return;
+		    }
+
+		    Iterator<Minecart> iter = monitored.iterator();
+		    while (iter.hasNext()) {
+			Minecart cart = iter.next();
+			if (cart.isEmpty()) {
+			    iter.remove();
+			    continue;
+			}
+			log.info(String.format("Minecart %s@[%d,%d,%d], velocity=[%g,%g,%g], maxspeed=%g",
+				cart.getUniqueId().toString(),
+				cart.getLocation().getBlockX(), cart.getLocation().getBlockY(), cart.getLocation().getBlockZ(),
+				cart.getVelocity().getX(), cart.getVelocity().getY(), cart.getVelocity().getZ(),
+				cart.getMaxSpeed()));
+		    }
+		}
+	    }, 0, 20);
+	    if (monitorTask < 0) {
+		log.severe("Failed to schedule monitoring task.");
+		return true;
+	    }
+	} else {
+	    stopMonitor();
+	}
+	
+	return true;
+    }
     
+    void stopMonitor() {
+	if (0 <= monitorTask) {
+	    plugin.getServer().getScheduler().cancelTask(monitorTask);
+	    monitorTask = -1;
+	}
+    }
+
     public boolean isSpeedSign(SignedBlock block) {
 	return block.readHeader().equalsIgnoreCase(header);
     }
@@ -158,6 +233,13 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	    if (speed == null) {
 		speed = Double.valueOf(speedLabel);
 	    }
+
+	    if (speed == 1.0) {
+		monitored.remove(cart);
+	    } else {
+		monitored.add(cart);
+	    }
+
 	    cart.setMaxSpeed(baseSpeed * speed);
 	} catch (NumberFormatException e) {
 	    return false;
@@ -178,6 +260,13 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	}
 	
 	Minecart cart = (Minecart)event.getVehicle();
+	
+	org.bukkit.util.Vector velocity = cart.getVelocity();
+	double velocityLimit = cart.getMaxSpeed() * 2.0;
+	double velocityLength = velocity.length();
+	if (velocityLimit < velocityLength) {
+	    cart.setVelocity(velocity.clone().multiply(velocityLimit / velocityLength));
+	}
 	
 	Location from = event.getFrom();
 	Location to = event.getTo();
@@ -222,9 +311,10 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	if (! isSpeedSign(block)) {
 	    return true;
 	}
+	
+	String label = block.readLabel();
 
-	return player.hasPermission("kularail.maxspeed")
-		&& player.hasPermission("kularail.maxspeed." + (speedLabels.containsKey(block.readLabel()) ? block.readLabel() : "any"));
+	return player.hasPermission("kularail.maxspeed.create." + (speedLabels.containsKey(label) ? label : "any"));
     }
 
     @Override
