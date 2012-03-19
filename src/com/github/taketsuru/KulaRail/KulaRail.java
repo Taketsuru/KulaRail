@@ -26,8 +26,6 @@ public class KulaRail extends JavaPlugin {
 
     @Override
     public void onEnable() {
-	commandManager.onEnable(this);
-
 	commandManager.registerSubcommand("reload", new CommandExecutor() {
 	    public boolean run(CommandSender sender, Command cmd, String label, String[] args) {
 		onDisable();

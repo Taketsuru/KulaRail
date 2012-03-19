@@ -13,10 +13,6 @@ public class CommandManager {
 
     Map<String, List<CommandExecutor>> subcommands = new HashMap<String, List<CommandExecutor>>();
 
-    public void onEnable(Plugin plugin) {
-	
-    }
-    
     public void onDisable(Plugin plugin) {
 	subcommands.clear();
     }
