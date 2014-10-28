@@ -4,15 +4,11 @@ import java.util.HashMap;
 import java.util.Vector;
 import java.util.logging.Logger;
 
-import net.minecraft.server.WorldServer;
-
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
-import org.bukkit.craftbukkit.CraftWorld;
-import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.event.EventHandler;
@@ -112,27 +108,7 @@ public class TeleporterManager implements Listener, SignedBlockListener {
           exitLocation.clone().add(face.getModX() + 0.5, face.getModY() + 0.35,
                                    face.getModZ() + 0.5);
         newLocation.setYaw(dir * 90.0f);
-        if (newLocation.getWorld() == vehicle.getWorld()) {
-          vehicle.teleport(newLocation);
-        } else {
-          WorldServer sourceWorld =
-            ((CraftWorld)vehicle.getWorld()).getHandle();
-          WorldServer destWorld =
-            ((CraftWorld)newLocation.getWorld()).getHandle();
-          net.minecraft.server.Entity vehicleHandle =
-            ((CraftEntity)vehicle).getHandle();
-          sourceWorld.tracker.untrackEntity(vehicleHandle);
-          vehicleHandle.world.removeEntity(vehicleHandle);
-          vehicleHandle.dead = false;
-          vehicleHandle.world = destWorld;
-          vehicleHandle.setLocation(newLocation.getX(),
-                                    newLocation.getY(),
-                                    newLocation.getZ(),
-                                    newLocation.getYaw(),
-                                    newLocation.getPitch());
-          destWorld.addEntity(vehicleHandle);
-          destWorld.tracker.track(vehicleHandle);
-        }
+        vehicle.teleport(newLocation);
         vehicle.setVelocity(new org.bukkit.util.Vector());
         break;
       }

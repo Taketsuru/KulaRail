@@ -17,14 +17,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.material.Sign;
 import org.bukkit.plugin.Plugin;
 
 public class SignedBlockManager implements Listener {
 
 	public static Block getAttachedBlock(Block signBlock) {
-		org.bukkit.material.Sign data =
-				new org.bukkit.material.Sign(signBlock.getType(),
-											 signBlock.getData());
+		Sign data = (Sign)signBlock.getState().getData();
 		return signBlock.getRelative(data.getAttachedFace());
 	}
 
@@ -139,7 +138,7 @@ public class SignedBlockManager implements Listener {
 								signBlock.getLocation(), event.getLines());
 		Player player = event.getPlayer();
 		if (! mayCreate(player, block)) {
-			player.sendMessage("ERROR: ‚±‚ÌŠÅ”Â‚ğì‚éŒ ŒÀ‚ª‚ ‚è‚Ü‚¹‚ñ");
+			player.sendMessage("ERROR: ï¿½ï¿½ï¿½ÌŠÅ”Â‚ï¿½ï¿½ï¿½éŒ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½");
 			event.setCancelled(true);
 			return;
 		}

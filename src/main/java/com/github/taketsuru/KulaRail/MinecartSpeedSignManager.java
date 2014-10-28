@@ -81,9 +81,8 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
     void loadDefaultSpeedLabels() {
 	speedLabels.clear();
 	speedLabels.put("normal", 1.0);
-	speedLabels.put("rapid", 2.45);
-	speedLabels.put("express", 4.9);
-	speedLabels.put("super_express", 9.8);
+	speedLabels.put("rapid", 1.8);
+	speedLabels.put("express", 3.0);
     }
 
     void reloadSpeedLabels() throws FileNotFoundException, IOException {
@@ -262,7 +261,7 @@ public class MinecartSpeedSignManager implements SignedBlockListener, Listener {
 	Minecart cart = (Minecart)event.getVehicle();
 	
 	org.bukkit.util.Vector velocity = cart.getVelocity();
-	double velocityLimit = cart.getMaxSpeed() * 2.0;
+	double velocityLimit = cart.getMaxSpeed() * 16.0;
 	double velocityLength = velocity.length();
 	if (velocityLimit < velocityLength) {
 	    cart.setVelocity(velocity.clone().multiply(velocityLimit / velocityLength));

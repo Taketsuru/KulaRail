@@ -35,7 +35,7 @@ public class WirelessDeviceManager implements Listener, SignedBlockListener {
     public boolean isTransmitter(SignedBlock block) {
 	return block.readHeader().equalsIgnoreCase(transmitterHeader);
     }
-    
+
     public boolean isReceiver(SignedBlock block) {
 	return block.readHeader().equalsIgnoreCase(receiverHeader);
     }
@@ -78,9 +78,9 @@ public class WirelessDeviceManager implements Listener, SignedBlockListener {
 
 		    Lever lever = (Lever)adjacentState.getData();
 		    if (lever.isPowered() != powered) {
-			net.minecraft.server.World world = ((org.bukkit.craftbukkit.CraftWorld)adjacent.getWorld()).getHandle();
-			net.minecraft.server.Block.byId[adjacent.getType().getId()]
-				.interact(world, adjacent.getX(), adjacent.getY(), adjacent.getZ(), null);
+	                lever.setPowered(powered);
+	                adjacentState.setData(lever);
+	                adjacentState.update();
 		    }
 		}
 	    }
