@@ -138,7 +138,7 @@ public class SignedBlockManager implements Listener {
 								signBlock.getLocation(), event.getLines());
 		Player player = event.getPlayer();
 		if (! mayCreate(player, block)) {
-			player.sendMessage("ERROR: ���̊Ŕ���錠��������܂���");
+			player.sendMessage("ERROR: No permission to create/change a sign");
 			event.setCancelled(true);
 			return;
 		}
