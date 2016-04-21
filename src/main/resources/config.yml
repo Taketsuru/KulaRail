@@ -1,1 +1,6 @@
-signed_blocks: []
+locale: en-US
+
+minecart_speed:
+  normal: 1.0
+  express: 2.5
+  super-express: 16.0

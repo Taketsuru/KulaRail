@@ -1,6 +1,8 @@
 name: KulaRail
-main: com.github.taketsuru.KulaRail.KulaRail
+main: jp.dip.myuminecraft.kularail.KulaRail
 version: "${project.version}"
+depend:
+  - TakeCore
 commands:
-    kr:
-        description: KulaRail commands.
+  kr:
+    description: KulaRail commands.

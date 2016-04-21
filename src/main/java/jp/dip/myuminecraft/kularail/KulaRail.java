@@ -1,0 +1,45 @@
+package jp.dip.myuminecraft.kularail;
+
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import jp.dip.myuminecraft.takecore.Logger;
+import jp.dip.myuminecraft.takecore.Messages;
+import jp.dip.myuminecraft.takecore.TakeCore;
+
+public class KulaRail extends JavaPlugin {
+
+    Logger                   logger;
+    Messages                 messages;
+    TakeCore                 takeCore;
+    TeleporterManager        teleporterManager;
+    WirelessDeviceManager    wirelessDeviceManager;
+    MinecartSpeedSignManager minecartSpeedSignManager;
+
+    @Override
+    public void onEnable() {
+        saveDefaultConfig();
+
+        ConfigurationSection config = getConfig();
+
+        logger = new Logger(getLogger());
+        messages = new Messages(config.getString("locale"));
+        teleporterManager = new TeleporterManager(this, logger, messages);
+        wirelessDeviceManager = new WirelessDeviceManager(this, logger, messages);
+        minecartSpeedSignManager = new MinecartSpeedSignManager(this, logger, messages,
+                config.getConfigurationSection("minecart_speed"));
+    }
+
+    @Override
+    public void onDisable() {
+        minecartSpeedSignManager.onDisable();
+        wirelessDeviceManager.onDisable();
+        teleporterManager.onDisable();
+        logger = null;
+        messages = null;
+        teleporterManager = null;
+        wirelessDeviceManager = null;
+        minecartSpeedSignManager = null;
+    }
+
+}

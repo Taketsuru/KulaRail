@@ -2,8 +2,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>jp.dip.myuminecraft</groupId>
 	<artifactId>KulaRail</artifactId>
-	<version>0.4.0</version>
-	<name>KulaRail</name>
+	<version>0.5.0</version>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
@@ -14,8 +13,8 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.5.1</version>
 				<configuration>
-					<source>8</source>
-					<target>8</target>
+					<source>7</source>
+					<target>7</target>
 				</configuration>
 			</plugin>
 		</plugins>
@@ -39,15 +38,20 @@
 	</repositories>
 	<dependencies>
 	    <dependency>
+	           <groupId>jp.dip.myuminecraft</groupId>
+	           <artifactId>TakeCore</artifactId>
+	           <version>0.0.1-SNAPSHOT</version>
+	    </dependency>
+	    <dependency>
 	           <groupId>org.spigotmc</groupId>
 	           <artifactId>spigot-api</artifactId>
-	           <version>1.9-R0.1-SNAPSHOT</version>
+	           <version>1.9.2-R0.1-SNAPSHOT</version>
 	           <scope>provided</scope>
 	    </dependency>
 	    <dependency>
 	            <groupId>org.bukkit</groupId>
 	            <artifactId>bukkit</artifactId>
-	            <version>1.9-R0.1-SNAPSHOT</version>
+	            <version>1.9.2-R0.1-SNAPSHOT</version>
 	            <scope>provided</scope>
 	    </dependency>
 	</dependencies>
