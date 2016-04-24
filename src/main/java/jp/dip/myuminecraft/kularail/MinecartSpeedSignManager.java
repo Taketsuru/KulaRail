@@ -85,7 +85,7 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
         Minecart cart = (Minecart) event.getVehicle();
 
         org.bukkit.util.Vector velocity = cart.getVelocity();
-        double velocityLimit = cart.getMaxSpeed() * 16.0;
+        double velocityLimit = cart.getMaxSpeed() * 1.5;
         double velocityLength = velocity.length();
         if (velocityLimit < velocityLength) {
             cart.setVelocity(
