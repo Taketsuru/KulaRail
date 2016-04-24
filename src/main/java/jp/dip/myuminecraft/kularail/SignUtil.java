@@ -2,7 +2,6 @@ package jp.dip.myuminecraft.kularail;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
 
 import jp.dip.myuminecraft.takecore.ManagedSign;
 
