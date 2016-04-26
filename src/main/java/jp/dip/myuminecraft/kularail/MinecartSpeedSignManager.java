@@ -34,7 +34,7 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     TakeCore                   takeCore;
     SignTable                  signTable;
     Map<String, Double>        speedTags;
-    Map<Location, ManagedSign> attachedLocationToSign;
+    Map<Location, ManagedSign> attachedBlocks;
 
     public MinecartSpeedSignManager(Plugin plugin, Logger logger,
             Messages messages, ConfigurationSection config) {
@@ -45,10 +45,10 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
                 .getPlugin("TakeCore");
         this.signTable = takeCore.getSignTable();
         this.speedTags = new HashMap<String, Double>();
-        this.attachedLocationToSign = new HashMap<Location, ManagedSign>();
+        this.attachedBlocks = new HashMap<Location, ManagedSign>();
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
 
         speedTags.clear();
-
         Map<String, Object> configValues = config.getValues(false);
         if (configValues != null) {
             for (Map.Entry<String, Object> entry : configValues.entrySet()) {
@@ -62,18 +62,12 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
         }
 
         signTable.addListener(this);
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
     public void onDisable() {
         signTable.removeListener(this);
-
-        plugin = null;
-        logger = null;
-        takeCore = null;
-        signTable = null;
-        speedTags = null;
-        attachedLocationToSign = null;
+        speedTags.clear();
+        attachedBlocks.clear();
     }
 
     @EventHandler
@@ -133,20 +127,19 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     }
 
     @Override
-    public boolean mayCreate(Player player, Location location,
+    public boolean mayCreate(Player player, Location location, Location attachedLocation,
             String[] lines) {
         if (!isSpeedSign(lines)) {
             return true;
         }
+
         String perm = permNodeToCreateSign + SignUtil.getLabel(lines);
         if (!player.hasPermission(perm)) {
             messages.send(player, "signCreationPermDenied");
             return false;
         }
 
-        Location attachedLocation = ManagedSign
-                .getAttachedBlock(location.getBlock()).getLocation();
-        if (attachedLocationToSign.containsKey(attachedLocation)) {
+        if (attachedBlocks.containsKey(attachedLocation)) {
             messages.send(player, "multipleSpeedSigns");
             return false;
         }
@@ -165,21 +158,22 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     }
 
     @Override
-    public ManagedSign create(Location location, String[] signText) {
+    public ManagedSign create(Location location, Location attachedLocation,
+            String[] signText) {
         if (!isSpeedSign(signText)) {
             return null;
         }
         SignUtil.setHeaderColor(signText, ChatColor.GREEN);
-        ManagedSign result = new ManagedSign(location, this);
-        attachedLocationToSign.put(result.getAttachedLocation(), result);
+        ManagedSign result = new ManagedSign(this, location, attachedLocation);
+        attachedBlocks.put(result.getAttachedLocation(), result);
         return result;
     }
 
     @Override
     public void destroy(ManagedSign sign) {
         Location location = sign.getAttachedLocation();
-        if (attachedLocationToSign.get(location) == sign) {
-            attachedLocationToSign.remove(location);
+        if (attachedBlocks.get(location) == sign) {
+            attachedBlocks.remove(location);
         }
     }
 
@@ -188,7 +182,7 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     }
 
     boolean checkSpeedSign(Location location, Minecart cart) {
-        ManagedSign sign = attachedLocationToSign.get(location);
+        ManagedSign sign = attachedBlocks.get(location);
         if (sign == null) {
             return false;
         }

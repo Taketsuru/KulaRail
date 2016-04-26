@@ -14,11 +14,13 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.Sign;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.material.Lever;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.ManagedSign;
@@ -29,27 +31,33 @@ import jp.dip.myuminecraft.takecore.TakeCore;
 
 public class WirelessDeviceManager implements Listener, SignTableListener {
 
-    private enum SignType {
+    enum SignType {
         RECEIVER, TRANSMITTER
     }
 
-    private final class WirelessSign extends ManagedSign {
+    static class WirelessSign extends ManagedSign {
         SignType           type;
-        List<WirelessSign> channel;
+        String             channelName;
         List<WirelessSign> receivers;
-        WirelessSign       xmitter;
+        WirelessSign       transmitter;
         boolean            isPowered;
 
-        public WirelessSign(Location location, SignTableListener owner,
-                SignType type, List<WirelessSign> channel, boolean isPowered) {
-            super(location, owner);
+        public WirelessSign(SignTableListener owner, Location location,
+                Location attachedLocation, SignType type, String channelName,
+                boolean isPowered) {
+            super(owner, location, attachedLocation);
             this.type = type;
-            this.channel = channel;
+            this.channelName = channelName;
             if (type == SignType.TRANSMITTER) {
                 receivers = new ArrayList<WirelessSign>();
             }
             this.isPowered = isPowered;
         }
+    }
+
+    static class TransmitterBlock {
+        List<WirelessSign> signs = new ArrayList<WirelessSign>();
+        boolean            isPowered;
     }
 
     static final String             receiverHeader       = "[kr.receiver]";
@@ -63,8 +71,9 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
     Logger                          logger;
     Messages                        messages;
     SignTable                       signTable;
-    Map<String, List<WirelessSign>> devices;
-    Map<Location, WirelessSign>     locationToXmitter;
+    Map<String, List<WirelessSign>> channels;
+    Map<Location, TransmitterBlock> transmitterBlocks;
+    Map<Location, WirelessSign>     receiverBlocks;
 
     public WirelessDeviceManager(Plugin plugin, Logger logger,
             Messages messages) {
@@ -74,47 +83,53 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
         PluginManager pluginManager = plugin.getServer().getPluginManager();
         TakeCore takeCore = (TakeCore) pluginManager.getPlugin("TakeCore");
         signTable = takeCore.getSignTable();
-        devices = new HashMap<String, List<WirelessSign>>();
-        locationToXmitter = new HashMap<Location, WirelessSign>();
-
+        channels = new HashMap<String, List<WirelessSign>>();
+        transmitterBlocks = new HashMap<Location, TransmitterBlock>();
+        receiverBlocks = new HashMap<Location, WirelessSign>();
         signTable.addListener(this);
         pluginManager.registerEvents(this, plugin);
     }
 
     public void onDisable() {
         signTable.removeListener(this);
+        channels.clear();
+        transmitterBlocks.clear();
+        receiverBlocks.clear();
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPhysics(BlockPhysicsEvent event) {
-        final Location location = event.getBlock().getLocation();
-        final WirelessSign xmitter = locationToXmitter.get(location);
-        if (xmitter == null) {
+        Block block = event.getBlock();
+        TransmitterBlock transmitterBlock = transmitterBlocks
+                .get(block.getLocation());
+        if (transmitterBlock == null) {
             return;
         }
 
-        boolean powered = xmitter.getAttachedBlock().isBlockPowered();
-        if (xmitter.isPowered == powered) {
+        boolean powered = block.isBlockPowered();
+        if (powered == transmitterBlock.isPowered) {
             return;
         }
+        transmitterBlock.isPowered = powered;
 
-        xmitter.isPowered = powered;
-
-        plugin.getServer().getScheduler().scheduleSyncDelayedTask(plugin,
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        if (locationToXmitter.get(location) == xmitter) {
-                            transmit(xmitter);
-                        }
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (WirelessSign sign : transmitterBlock.signs) {
+                    if (sign.isPowered != powered) {
+                        sign.isPowered = powered;
+                        transmit(sign);
                     }
-                }, 1);
+                }
+            }
+        }.runTaskLater(plugin, 1);
     }
 
     @Override
     public boolean mayCreate(Player player, Location location,
-            String[] lines) {
-        if (!isReceiverSign(lines) && !isTransmitterSign(lines)) {
+            Location attachedLocation, String[] lines) {
+        boolean isReceiver = isReceiverSign(lines);
+        if (!isReceiver && !isTransmitterSign(lines)) {
             return true;
         }
 
@@ -123,79 +138,88 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
             return false;
         }
 
+        if (isReceiver && receiverBlocks.containsKey(attachedLocation)) {
+            messages.send(player, "multipleReceiverSigns");
+            return false;
+        }
+
         return true;
     }
 
     @Override
-    public ManagedSign create(Location location, String[] lines) {
+    public ManagedSign create(Location location, Location attachedLocation,
+            String[] lines) {
         boolean isReceiver = isReceiverSign(lines);
-        boolean isTransmitter = !isReceiver && isTransmitterSign(lines);
-
-        if (!isReceiver && !isTransmitter) {
+        if (!isReceiver && !isTransmitterSign(lines)) {
             return null;
         }
 
-        String name = SignUtil.getLabel(lines);
-        List<WirelessSign> list = devices.get(name);
+        String channelName = SignUtil.getLabel(lines);
+        List<WirelessSign> channel = channels.get(channelName);
         boolean needToConnect = false;
-        if (list == null) {
-            list = new ArrayList<WirelessSign>();
-            devices.put(name, list);
-            SignUtil.setHeaderColor(lines, ChatColor.RED);
+        if (channel == null) {
+            channel = new ArrayList<WirelessSign>();
+            channels.put(channelName, channel);
         } else {
-            int xmitterCount = getTransmitterCount(list);
-            int receiverCount = list.size() - xmitterCount;
-            if (list.size() == 0 || (isTransmitter ? receiverCount == 0
-                    : xmitterCount == 0)) {
-                SignUtil.setHeaderColor(lines, ChatColor.RED);
-            } else {
-                if (isTransmitter ? xmitterCount == 0 : receiverCount == 0) {
-                    setColor(list, ChatColor.GREEN);
-                }
-                SignUtil.setHeaderColor(lines, ChatColor.GREEN);
-                needToConnect = true;
+            int transmitterCount = getTransmitterCount(channel);
+            int receiverCount = channel.size() - transmitterCount;
+
+            if (isReceiver ? receiverCount == 0 : transmitterCount == 0) {
+                setColor(channel, ChatColor.GREEN);
             }
+
+            needToConnect = isReceiver ? 0 < transmitterCount
+                    : 0 < receiverCount;
         }
 
-        WirelessSign sign = new WirelessSign(location, this,
-                isReceiver ? SignType.RECEIVER : SignType.TRANSMITTER, list,
-                ManagedSign.getAttachedBlock(location.getBlock())
-                        .isBlockPowered());
+        SignUtil.setHeaderColor(lines,
+                needToConnect ? ChatColor.GREEN : ChatColor.RED);
+
+        boolean isPowered = attachedLocation.getBlock().isBlockPowered();
+        WirelessSign sign = new WirelessSign(this, location, attachedLocation,
+                isReceiver ? SignType.RECEIVER : SignType.TRANSMITTER,
+                channelName, isPowered);
 
         if (needToConnect) {
-            switch (sign.type) {
-            case TRANSMITTER:
-                for (WirelessSign receiver : list) {
-                    if (receiver.xmitter != null) {
-                        double currentValue = SignUtil
-                                .distanceSquared(receiver, receiver.xmitter);
+            if (isReceiver) {
+                connectToNearestTransmitter(sign, channel);
+
+            } else {
+                for (WirelessSign receiver : channel) {
+                    if (receiver.transmitter != null) {
+                        double currentValue = SignUtil.distanceSquared(
+                                receiver, receiver.transmitter);
                         double newValue = SignUtil.distanceSquared(receiver,
                                 sign);
                         if (currentValue <= newValue) {
                             continue;
                         }
-                        receiver.xmitter.receivers.remove(receiver);
+                        receiver.transmitter.receivers.remove(receiver);
                     }
-                    receiver.xmitter = sign;
+                    receiver.transmitter = sign;
                     sign.receivers.add(receiver);
                 }
-                break;
-
-            case RECEIVER:
-                connectToNearestTransmitter(sign);
-                break;
-
-            default:
             }
         }
 
-        list.add(sign);
+        channel.add(sign);
 
-        if (isTransmitter) {
-            locationToXmitter.put(sign.getAttachedBlock().getLocation(), sign);
+        if (isReceiver) {
+            receiverBlocks.put(attachedLocation, sign);
+            if (sign.transmitter != null) {
+                setReceiverPowered(sign, sign.transmitter.isPowered);
+            }
+
+        } else {
+            TransmitterBlock transmitters = transmitterBlocks
+                    .get(attachedLocation);
+            if (transmitters == null) {
+                transmitters = new TransmitterBlock();
+                transmitters.isPowered = isPowered;
+                transmitterBlocks.put(attachedLocation, transmitters);
+            }
+            transmitters.signs.add(sign);
             transmit(sign);
-        } else if (sign.xmitter != null) {
-            transmit(sign.xmitter);
         }
 
         return sign;
@@ -205,38 +229,72 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
     public void destroy(ManagedSign signBase) {
         WirelessSign sign = (WirelessSign) signBase;
 
-        if (sign.type == SignType.TRANSMITTER) {
-            locationToXmitter.remove(sign.getAttachedLocation());
-        }
-
-        if (sign.channel.size() == 1) {
-            Sign state = (Sign) sign.getLocation().getBlock().getState();
-            devices.remove(SignUtil.getLabel(state.getLines()));
-            return;
-        }
-
-        sign.channel.remove(sign);
-
-        int xmitterCount = getTransmitterCount(sign.channel);
-        int receiverCount = sign.channel.size() - xmitterCount;
-        if (sign.type == SignType.TRANSMITTER ? xmitterCount == 0
-                : receiverCount == 0) {
-            setColor(sign.channel, ChatColor.RED);
-        }
-
         switch (sign.type) {
         case TRANSMITTER:
-            while (!sign.receivers.isEmpty()) {
-                WirelessSign receiver = sign.receivers.get(0);
-                connectToNearestTransmitter(receiver);
-                setReceiverPowered(receiver, receiver.xmitter != null
-                        ? receiver.xmitter.isPowered : false);
+            Location attachedLocation = sign.getAttachedLocation();
+            TransmitterBlock transmitters = transmitterBlocks
+                    .get(attachedLocation);
+            transmitters.signs.remove(sign);
+            if (transmitters.signs.isEmpty()) {
+                transmitterBlocks.remove(attachedLocation);
             }
             break;
 
         case RECEIVER:
-            if (sign.xmitter != null) {
-                sign.xmitter.receivers.remove(sign);
+            receiverBlocks.remove(sign.getAttachedLocation());
+            break;
+
+        default:
+            throw new AssertionError();
+        }
+
+        String channelName = sign.channelName;
+        List<WirelessSign> channel = channels.get(channelName);
+        if (channel.size() == 1) {
+            channels.remove(channelName);
+            return;
+        }
+
+        channel.remove(sign);
+
+        int transmitterCount = getTransmitterCount(channel);
+        int receiverCount = channel.size() - transmitterCount;
+        if (sign.type == SignType.TRANSMITTER ? transmitterCount == 0
+                : receiverCount == 0) {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    List<WirelessSign> channel = channels.get(channelName);
+                    if (channel != null) {
+                        setColor(channel, ChatColor.RED);
+                    }
+                }
+            }.runTask(plugin);
+        }
+
+        switch (sign.type) {
+        case TRANSMITTER:
+            List<WirelessSign> receivers = sign.receivers;
+            List<WirelessSign> worklist = new ArrayList<WirelessSign>(
+                    receivers);
+
+            while (!receivers.isEmpty()) {
+                connectToNearestTransmitter(
+                        receivers.get(receivers.size() - 1), channel);
+            }
+
+            for (WirelessSign receiver : worklist) {
+                WirelessSign transmitter = receiver.transmitter;
+                if (transmitter != null) {
+                    setReceiverPowered(receiver, transmitter.isPowered);
+                }
+            }
+            break;
+
+        case RECEIVER:
+            if (sign.transmitter != null) {
+                sign.transmitter.receivers.remove(sign);
+                sign.transmitter = null;
             }
             break;
 
@@ -255,57 +313,58 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
     }
 
     static int getTransmitterCount(List<WirelessSign> channel) {
-        int xmitterCount = 0;
+        int result = 0;
         for (WirelessSign sign : channel) {
             if (sign.type == SignType.TRANSMITTER) {
-                ++xmitterCount;
+                ++result;
             }
         }
-        return xmitterCount;
+        return result;
     }
 
     void setColor(List<WirelessSign> channel, ChatColor color) {
-        for (WirelessSign block : channel) {
-            Sign state = (Sign) block.getLocation().getBlock().getState();
-            SignUtil.setHeaderColor(state.getLines(), color);
-            state.update();
+        for (WirelessSign sign : new ArrayList<WirelessSign>(channel)) {
+            BlockState state = sign.getLocation().getBlock().getState();
+            if (state instanceof Sign) {
+                SignUtil.setHeaderColor(((Sign) state).getLines(), color);
+                state.update(false, false);
+            }
         }
     }
 
-    void transmit(WirelessSign xmitter) {
-        List<WirelessSign> receivers = xmitter.receivers;
+    void transmit(WirelessSign transmitter) {
+        List<WirelessSign> receivers = transmitter.receivers;
         if (receivers.isEmpty()) {
             return;
         }
 
-        boolean powered = xmitter.isPowered;
+        boolean powered = transmitter.isPowered;
         for (WirelessSign receiver : receivers) {
             setReceiverPowered(receiver, powered);
         }
     }
 
     void setReceiverPowered(WirelessSign receiver, boolean powered) {
+        Block attachedBlock = receiver.getAttachedBlock();
         for (BlockFace face : faces) {
-            Block adjacent = receiver.getAttachedBlock().getRelative(face);
-            BlockState adjacentState = adjacent.getState();
-
-            if (adjacentState.getType() != Material.LEVER) {
-                continue;
-            }
-
-            Lever lever = (Lever) adjacentState.getData();
-            if (lever.isPowered() != powered) {
-                lever.setPowered(powered);
-                adjacentState.setData(lever);
-                adjacentState.update();
+            Block adjacent = attachedBlock.getRelative(face);
+            if (adjacent.getType() == Material.LEVER) {
+                BlockState adjacentState = adjacent.getState();
+                Lever lever = (Lever) adjacentState.getData();
+                if (lever.isPowered() != powered) {
+                    lever.setPowered(powered);
+                    adjacentState.setData(lever);
+                    adjacentState.update();
+                }
             }
         }
     }
 
-    void connectToNearestTransmitter(WirelessSign receiver) {
+    void connectToNearestTransmitter(WirelessSign receiver,
+            List<WirelessSign> channel) {
         double minValue = Double.MAX_VALUE;
         WirelessSign nearest = null;
-        for (WirelessSign sign : receiver.channel) {
+        for (WirelessSign sign : channel) {
             if (sign.type != SignType.TRANSMITTER) {
                 continue;
             }
@@ -316,10 +375,10 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
             }
         }
 
-        if (receiver.xmitter != null) {
-            receiver.xmitter.receivers.remove(receiver);
+        if (receiver.transmitter != null) {
+            receiver.transmitter.receivers.remove(receiver);
         }
-        receiver.xmitter = nearest;
+        receiver.transmitter = nearest;
         if (nearest != null) {
             nearest.receivers.add(receiver);
         }

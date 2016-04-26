@@ -17,8 +17,10 @@ import org.bukkit.entity.Vehicle;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.vehicle.VehicleBlockCollisionEvent;
+import org.bukkit.material.MaterialData;
 import org.bukkit.material.Rails;
-import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.ManagedSign;
@@ -29,19 +31,19 @@ import jp.dip.myuminecraft.takecore.TakeCore;
 
 public class TeleporterManager implements Listener, SignTableListener {
 
-    private enum SignType {
+    enum SignType {
         ENTRY, EXIT
     };
 
-    private class TeleporterSign extends ManagedSign {
-        SignType             type;
-        List<TeleporterSign> channel;
+    static class TeleporterSign extends ManagedSign {
+        SignType type;
+        String   channelName;
 
-        public TeleporterSign(Location location, SignTableListener owner,
-                SignType type, List<TeleporterSign> channel) {
-            super(location, owner);
+        public TeleporterSign(SignTableListener owner, Location location,
+                Location attachedLocation, SignType type, String channelName) {
+            super(owner, location, attachedLocation);
             this.type = type;
-            this.channel = channel;
+            this.channelName = channelName;
         }
     }
 
@@ -50,14 +52,15 @@ public class TeleporterManager implements Listener, SignTableListener {
     static final BlockFace[]          faces       = { BlockFace.WEST,
     BlockFace.NORTH, BlockFace.EAST, BlockFace.SOUTH };
 
-    Plugin                            plugin;
+    JavaPlugin                        plugin;
     Logger                            logger;
     Messages                          messages;
     SignTable                         signTable;
     Map<String, List<TeleporterSign>> channels;
     Map<Location, TeleporterSign>     blocks;
 
-    public TeleporterManager(Plugin plugin, Logger logger, Messages messages) {
+    public TeleporterManager(JavaPlugin plugin, Logger logger,
+            Messages messages) {
         this.plugin = plugin;
         this.logger = logger;
         this.messages = messages;
@@ -66,37 +69,29 @@ public class TeleporterManager implements Listener, SignTableListener {
         signTable = takeCore.getSignTable();
         channels = new HashMap<String, List<TeleporterSign>>();
         blocks = new HashMap<Location, TeleporterSign>();
-
-        signTable.addListener(this);
-
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        signTable.addListener(this);
     }
 
     public void onDisable() {
         signTable.removeListener(this);
-
-        blocks = null;
-        channels = null;
-        signTable = null;
-        messages = null;
-        logger = null;
-        plugin = null;
+        channels.clear();
+        blocks.clear();
     }
 
     @EventHandler
     public void onVehicleBlockCollision(VehicleBlockCollisionEvent event) {
-        TeleporterSign sign = blocks.get(event.getBlock().getLocation());
+        Location entryLocation = event.getBlock().getLocation();
+        TeleporterSign sign = blocks.get(entryLocation);
         if (sign == null) {
             return;
         }
 
-        logger.info("sign.type %s", sign.type);
         if (sign.type != SignType.ENTRY) {
             return;
         }
 
-        Location entryLocation = sign.getLocation();
-        List<TeleporterSign> channel = sign.channel;
+        List<TeleporterSign> channel = channels.get(sign.channelName);
         World entryWorld = entryLocation.getWorld();
         Location exitLocation = null;
         double minDistanceSquared = Double.MAX_VALUE;
@@ -107,7 +102,7 @@ public class TeleporterManager implements Listener, SignTableListener {
 
             Location location = exitSign.getAttachedLocation();
             double distanceSquared = location.getWorld() == entryWorld
-                    ? location.distanceSquared(entryLocation)
+                    ? location.distanceSquared(location)
                     : Double.MAX_VALUE / 2;
             if (distanceSquared < minDistanceSquared) {
                 minDistanceSquared = distanceSquared;
@@ -115,7 +110,6 @@ public class TeleporterManager implements Listener, SignTableListener {
             }
         }
 
-        logger.info("exitLocation %s", exitLocation);
         if (exitLocation == null) {
             return;
         }
@@ -125,13 +119,12 @@ public class TeleporterManager implements Listener, SignTableListener {
         for (int dir = 0; dir < faces.length; ++dir) {
             BlockFace face = faces[dir];
             Block adjacent = exitBlock.getRelative(face);
-            BlockState state = adjacent.getState();
-            if (!(state.getData() instanceof Rails)) {
+            MaterialData data = adjacent.getState().getData();
+            if (!(data instanceof Rails)) {
                 continue;
             }
 
-            Rails rails = (Rails) state.getData();
-            switch (rails.getDirection()) {
+            switch (((Rails) data).getDirection()) {
             case EAST:
             case WEST:
                 if (face != BlockFace.EAST && face != BlockFace.WEST) {
@@ -158,16 +151,14 @@ public class TeleporterManager implements Listener, SignTableListener {
             newLocation.setYaw(dir * 90.0f);
             vehicle.teleport(newLocation);
             vehicle.setVelocity(new org.bukkit.util.Vector());
-            logger.info("newLocation %s", newLocation);
 
             break;
         }
-        logger.info("leave");
     }
 
     @Override
     public boolean mayCreate(Player player, Location location,
-            String[] lines) {
+            Location attachedLocation, String[] lines) {
         if (!isEntryBlock(lines) && !isExitBlock(lines)) {
             return true;
         }
@@ -177,37 +168,48 @@ public class TeleporterManager implements Listener, SignTableListener {
             return false;
         }
 
+        if (blocks.containsKey(attachedLocation)) {
+            messages.send(player, "multipleTeleporterSigns");
+            return false;
+        }
+
         return true;
     }
 
     @Override
-    public ManagedSign create(Location location, String[] lines) {
+    public ManagedSign create(Location location, Location attachedLocation,
+            String[] lines) {
         boolean isEntry = isEntryBlock(lines);
         if (!isEntry && !isExitBlock(lines)) {
             return null;
         }
 
-        String name = SignUtil.getLabel(lines);
-        List<TeleporterSign> channel = channels.get(name);
+        boolean hasPeer = false;
+        String channelName = SignUtil.getLabel(lines);
+        List<TeleporterSign> channel = channels.get(channelName);
         if (channel == null) {
             channel = new ArrayList<TeleporterSign>();
-            channels.put(name, channel);
-            SignUtil.setHeaderColor(lines, ChatColor.RED);
+            channels.put(channelName, channel);
         } else {
-            int channelSize = channel.size();
-            if (channelSize == 0 || (isEntry ? getExitCount(channel) == 0
-                    : getExitCount(channel) == channelSize)) {
-                SignUtil.setHeaderColor(lines, ChatColor.RED);
-            } else {
-                setColor(channel, ChatColor.GREEN);
-                SignUtil.setHeaderColor(lines, ChatColor.GREEN);
+            int exitCount = getExitCount(channel);
+            int entryCount = channel.size() - exitCount;
+            if (isEntry ? 0 < exitCount : 0 < entryCount) {
+                hasPeer = true;
+                if (isEntry ? entryCount == 0 : exitCount == 0) {
+                    setColor(channel, ChatColor.GREEN);
+                }
             }
         }
 
-        TeleporterSign result = new TeleporterSign(location, this,
-                isEntry ? SignType.ENTRY : SignType.EXIT, channel);
+        SignUtil.setHeaderColor(lines,
+                hasPeer ? ChatColor.GREEN : ChatColor.RED);
+
+        TeleporterSign result = new TeleporterSign(this, location,
+                attachedLocation, isEntry ? SignType.ENTRY : SignType.EXIT,
+                channelName);
+
         channel.add(result);
-        blocks.put(result.getAttachedLocation(), result);
+        blocks.put(attachedLocation, result);
 
         return result;
     }
@@ -215,31 +217,32 @@ public class TeleporterManager implements Listener, SignTableListener {
     @Override
     public void destroy(ManagedSign signBase) {
         TeleporterSign sign = (TeleporterSign) signBase;
-        logger.info("destroy %s", sign);
 
-        Location attachedLocation = sign.getAttachedLocation();
-        if (blocks.get(attachedLocation) == sign) {
-            blocks.remove(attachedLocation);
-        }
+        blocks.remove(sign.getAttachedLocation());
 
-        List<TeleporterSign> channel = sign.channel;
+        String channelName = sign.channelName;
+        List<TeleporterSign> channel = channels.get(channelName);
 
         if (channel.size() == 1) {
-            Location location = sign.getLocation();
-            Sign state = (Sign) location.getBlock().getState();
-            String[] lines = state.getLines();
-            channels.remove(SignUtil.getLabel(lines));
-            logger.info("remove channel %s", SignUtil.getLabel(lines));
+            channels.remove(channelName);
             return;
         }
 
         channel.remove(sign);
 
-        int channelSize = channel.size();
         int exitCount = getExitCount(channel);
-        if (sign.type == SignType.ENTRY ? channelSize == exitCount
+        int entryCount = channel.size() - exitCount;
+        if (sign.type == SignType.ENTRY ? entryCount == 0
                 : exitCount == 0) {
-            setColor(channel, ChatColor.RED);
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    List<TeleporterSign> channel = channels.get(channelName);
+                    if (channel != null) {
+                        setColor(channel, ChatColor.RED);
+                    }
+                }
+            }.runTask(plugin);
         }
     }
 
@@ -262,11 +265,12 @@ public class TeleporterManager implements Listener, SignTableListener {
     }
 
     void setColor(List<TeleporterSign> channel, ChatColor color) {
-        for (TeleporterSign block : channel) {
-            Sign state = (Sign) block.getLocation().getBlock().getState();
-            SignUtil.setHeaderColor(state.getLines(), color);
-            state.update();
+        for (TeleporterSign sign : new ArrayList<TeleporterSign>(channel)) {
+            BlockState state = sign.getLocation().getBlock().getState();
+            if (state instanceof Sign) {
+                SignUtil.setHeaderColor(((Sign) state).getLines(), color);
+                state.update(false, false);
+            }
         }
     }
-
 }
