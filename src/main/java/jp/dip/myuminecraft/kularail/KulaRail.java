@@ -1,5 +1,8 @@
 package jp.dip.myuminecraft.kularail;
 
+import java.util.Locale;
+import java.util.ResourceBundle;
+
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -23,7 +26,8 @@ public class KulaRail extends JavaPlugin {
         ConfigurationSection config = getConfig();
 
         logger = new Logger(getLogger());
-        messages = new Messages(config.getString("locale"));
+        Locale locale = Messages.getLocale(getConfig().getString("locale"));
+        messages = new Messages(ResourceBundle.getBundle("messages", locale), locale);
         teleporterManager = new TeleporterManager(this, logger, messages);
         wirelessDeviceManager = new WirelessDeviceManager(this, logger, messages);
         minecartSpeedSignManager = new MinecartSpeedSignManager(this, logger, messages,
