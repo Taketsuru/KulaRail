@@ -25,7 +25,7 @@ import jp.dip.myuminecraft.takecore.TakeCore;
 public class MinecartSpeedSignManager implements SignTableListener, Listener {
 
     static final String        header               = "[kr.maxspeed]";
-    static final String        permNodeToCreateSign = "kularail.maxspeed.create.";
+    static final String        permNodeToCreateSign = "kularail.maxspeed.";
     static final double        baseSpeed            = 0.4;
 
     Plugin                     plugin;
@@ -133,8 +133,9 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
             return true;
         }
 
+        String allPerm = permNodeToCreateSign + '*';
         String perm = permNodeToCreateSign + SignUtil.getLabel(lines);
-        if (!player.hasPermission(perm)) {
+        if (!player.hasPermission(allPerm) && !player.hasPermission(perm)) {
             messages.send(player, "signCreationPermDenied");
             return false;
         }

@@ -134,7 +134,7 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
         }
 
         if (!player.hasPermission(signCreationPermNode)) {
-            messages.send(player, "signCreationPermDenied");
+            messages.send(player, "wirelessSignCreationPermDenied");
             return false;
         }
 
