@@ -147,8 +147,8 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
     }
 
     @Override
-    public ManagedSign create(Location location, Location attachedLocation,
-            String[] lines) {
+    public ManagedSign create(Player player, Location location,
+            Location attachedLocation, String[] lines) {
         boolean isReceiver = isReceiverSign(lines);
         if (!isReceiver && !isTransmitterSign(lines)) {
             return null;
@@ -226,7 +226,7 @@ public class WirelessDeviceManager implements Listener, SignTableListener {
     }
 
     @Override
-    public void destroy(ManagedSign signBase) {
+    public void destroy(Player player, ManagedSign signBase) {
         WirelessSign sign = (WirelessSign) signBase;
 
         switch (sign.type) {

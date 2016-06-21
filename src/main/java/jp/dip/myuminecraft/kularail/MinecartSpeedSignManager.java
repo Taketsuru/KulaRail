@@ -127,8 +127,8 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     }
 
     @Override
-    public boolean mayCreate(Player player, Location location, Location attachedLocation,
-            String[] lines) {
+    public boolean mayCreate(Player player, Location location,
+            Location attachedLocation, String[] lines) {
         if (!isSpeedSign(lines)) {
             return true;
         }
@@ -159,8 +159,8 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     }
 
     @Override
-    public ManagedSign create(Location location, Location attachedLocation,
-            String[] signText) {
+    public ManagedSign create(Player player, Location location,
+            Location attachedLocation, String[] signText) {
         if (!isSpeedSign(signText)) {
             return null;
         }
@@ -171,7 +171,7 @@ public class MinecartSpeedSignManager implements SignTableListener, Listener {
     }
 
     @Override
-    public void destroy(ManagedSign sign) {
+    public void destroy(Player player, ManagedSign sign) {
         Location location = sign.getAttachedLocation();
         if (attachedBlocks.get(location) == sign) {
             attachedBlocks.remove(location);

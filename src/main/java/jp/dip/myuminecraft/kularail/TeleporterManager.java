@@ -177,8 +177,8 @@ public class TeleporterManager implements Listener, SignTableListener {
     }
 
     @Override
-    public ManagedSign create(Location location, Location attachedLocation,
-            String[] lines) {
+    public ManagedSign create(Player player, Location location,
+            Location attachedLocation, String[] lines) {
         boolean isEntry = isEntryBlock(lines);
         if (!isEntry && !isExitBlock(lines)) {
             return null;
@@ -215,7 +215,7 @@ public class TeleporterManager implements Listener, SignTableListener {
     }
 
     @Override
-    public void destroy(ManagedSign signBase) {
+    public void destroy(Player player, ManagedSign signBase) {
         TeleporterSign sign = (TeleporterSign) signBase;
 
         blocks.remove(sign.getAttachedLocation());
@@ -232,8 +232,7 @@ public class TeleporterManager implements Listener, SignTableListener {
 
         int exitCount = getExitCount(channel);
         int entryCount = channel.size() - exitCount;
-        if (sign.type == SignType.ENTRY ? entryCount == 0
-                : exitCount == 0) {
+        if (sign.type == SignType.ENTRY ? entryCount == 0 : exitCount == 0) {
             new BukkitRunnable() {
                 @Override
                 public void run() {
